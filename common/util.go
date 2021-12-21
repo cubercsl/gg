@@ -106,3 +106,19 @@ func SetValue(values *url.Values, key string, value string) {
 	}
 	values.Set(key, value)
 }
+
+func Max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func MustMapKeys(m interface{}) (keys []string) {
+	v := reflect.ValueOf(m)
+	vKeys := v.MapKeys()
+	for _, k := range vKeys {
+		keys = append(keys, k.String())
+	}
+	return keys
+}

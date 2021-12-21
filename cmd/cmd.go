@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/mzz2017/gg/tracer"
 	"github.com/sirupsen/logrus"
@@ -8,7 +10,9 @@ import (
 	"github.com/spf13/viper"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
+	"syscall"
 )
 
 var (
@@ -22,7 +26,8 @@ var (
 program to your modern proxy without installing any other programs.`,
 		Version: Version,
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 0 {
+			hasSelectFlag, _ := cmd.PersistentFlags().GetBool("select")
+			if len(args) == 0 && !hasSelectFlag {
 				fmt.Println(`No command is given, you can try:
 $ gg --help
 or
@@ -35,14 +40,24 @@ $ gg git clone https://github.com/mzz2017/gg.git`)
 			log.Tracef("OS/Arch: %v/%v\n", runtime.GOOS, runtime.GOARCH)
 			v, _ = getConfig(log, true, viper.New, cmd)
 			// validate command and get the fullPath from $PATH
-			fullPath, err := exec.LookPath(args[0])
-			if err != nil {
-				logrus.Fatal("exec.LookPath:", err)
+			var (
+				fullPath string
+				err      error
+			)
+			if len(args) != 0 {
+				fullPath, err = exec.LookPath(args[0])
+				if err != nil {
+					logrus.Fatal("exec.LookPath:", err)
+				}
 			}
 			// get dialer
 			dialer, err := GetDialer(log)
 			if err != nil {
 				logrus.Fatal("GetDialer:", err)
+			}
+
+			if len(args) == 0 {
+				return
 			}
 
 			noUDP, err := cmd.Flags().GetBool("noudp")
@@ -52,18 +67,13 @@ $ gg git clone https://github.com/mzz2017/gg.git`)
 			if !noUDP && !dialer.SupportUDP() {
 				log.Info("Your proxy server does not support UDP, so we will not redirect UDP traffic.")
 			}
-			preserveEnv, err := cmd.Flags().GetBool("preserve-env")
-			if err != nil {
-				logrus.Fatal("GetBool(preserve-env):", err)
-			}
-			var env []string
-			if preserveEnv {
-				env = os.Environ()
-			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			t, err := tracer.New(
+				ctx,
 				fullPath,
 				args,
-				&os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}, Env: env},
+				&os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}, Env: os.Environ()},
 				dialer,
 				noUDP,
 				log,
@@ -71,9 +81,18 @@ $ gg git clone https://github.com/mzz2017/gg.git`)
 			if err != nil {
 				logrus.Fatal("tracer.New:", err)
 			}
+			go func() {
+				// listen signal
+				sigs := make(chan os.Signal, 1)
+				signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGKILL, syscall.SIGILL)
+				<-sigs
+				cancel()
+			}()
 			code, err := t.Wait()
 			if err != nil {
-				logrus.Fatal("tracer.Wait:", err)
+				if !errors.Is(err, context.Canceled) {
+					logrus.Fatal("tracer.Wait:", err)
+				}
 			}
 			os.Exit(code)
 		},
@@ -93,7 +112,6 @@ func init() {
 	rootCmd.PersistentFlags().Bool("noudp", false, "do not redirect UDP traffic, even though the proxy server supports")
 	rootCmd.PersistentFlags().Bool("testnode", true, "test the connectivity before connecting to the node")
 	rootCmd.PersistentFlags().Bool("select", false, "manually select the node to connect from the subscription")
-	rootCmd.PersistentFlags().BoolP("preserve-env", "E", false, "preserve user environment when running command")
 	rootCmd.AddCommand(configCmd)
 }
 

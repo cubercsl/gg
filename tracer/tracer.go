@@ -1,6 +1,7 @@
 package tracer
 
 import (
+	"context"
 	"fmt"
 	"github.com/mzz2017/gg/dialer"
 	"github.com/mzz2017/gg/proxy"
@@ -14,15 +15,17 @@ import (
 type SocketMetadata struct {
 	Family int
 	Type   int
+	Protocol int
 }
 
 // Tracer is not thread-safe.
 type Tracer struct {
+	ctx        context.Context
 	ignoreUDP  bool
 	supportUDP bool
 	log        *logrus.Logger
 	proxy      *proxy.Proxy
-	mainPID    int
+	proc       *os.Process
 	storehouse Storehouse
 	socketInfo map[int]map[int]SocketMetadata
 	closed     chan struct{}
@@ -30,8 +33,9 @@ type Tracer struct {
 	exitErr    error
 }
 
-func New(name string, argv []string, attr *os.ProcAttr, dialer *dialer.Dialer, ignoreUDP bool, logger *logrus.Logger) (*Tracer, error) {
+func New(ctx context.Context, name string, argv []string, attr *os.ProcAttr, dialer *dialer.Dialer, ignoreUDP bool, logger *logrus.Logger) (*Tracer, error) {
 	t := &Tracer{
+		ctx:        ctx,
 		log:        logger,
 		supportUDP: dialer.SupportUDP(),
 		proxy:      proxy.New(logger, dialer),
@@ -64,11 +68,15 @@ func New(name string, argv []string, attr *os.ProcAttr, dialer *dialer.Dialer, i
 			t.exitErr = err
 			return
 		}
+		t.proc = proc
 		close(done)
 		time.Sleep(1 * time.Millisecond)
-		code, err := t.trace(proc.Pid)
+		code, err := t.trace()
 		t.exitCode = code
 		t.exitErr = err
+		if err != nil {
+			t.proc.Kill()
+		}
 		close(t.closed)
 	}()
 	<-done
@@ -84,7 +92,8 @@ func (t *Tracer) Wait() (exitCode int, err error) {
 }
 
 // Trace traces the process. proc is the process ID (main thread).
-func (t *Tracer) trace(proc int) (exitCode int, err error) {
+func (t *Tracer) trace() (exitCode int, err error) {
+	proc := t.proc.Pid
 	// Thanks https://stackoverflow.com/questions/5477976/how-to-ptrace-a-multi-threaded-application and https://github.com/hmgle/graftcp
 	err = syscall.PtraceAttach(proc)
 	if err != nil {
@@ -110,10 +119,22 @@ func (t *Tracer) trace(proc int) (exitCode int, err error) {
 	}
 	//t.log.Tracef("child %v created\n", proc)
 	for {
+		select {
+		case <-t.ctx.Done():
+			syscall.PtraceDetach(proc)
+			return 1, t.ctx.Err()
+		default:
+		}
 		var status syscall.WaitStatus
 		child, err := syscall.Wait4(-1, &status, syscall.WALL, nil)
 		if err != nil {
 			return 0, fmt.Errorf("wait4() threw: %w", err)
+		}
+		select {
+		case <-t.ctx.Done():
+			syscall.PtraceDetach(proc)
+			return 1, t.ctx.Err()
+		default:
 		}
 		//t.log.Tracef("main: %v, child: %v\n", proc, child)
 		if t.getSocketInfo(child, 0) == nil {

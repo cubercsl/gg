@@ -79,6 +79,15 @@ Output:
 > Resolving deltas: 100% (7155/7155), done.
 > ```
 
+Or just redirect the traffic of whole shell session to your proxy:
+
+```bash
+gg bash
+
+git clone --depth=1 https://github.com/torvalds/linux.git
+curl ipv4.appspot.com
+```
+
 ### Temporarily use
 
 **Use share-link**
@@ -141,11 +150,24 @@ gg --subscription https://example.com/path/to/sub --select curl ipv4.appspot.com
 ```
 
 > ```
-> Select to connect:
-> [ ] 253ms - Azure US West
-> [x] 51ms - Azure HK
-> [ ] 70ms - xTom IIJ JP
-> 13.141.150.163
+> WARN[0000] Test nodes...
+> Use the arrow keys to navigate: ↓ ↑ → ←  and / toggles search
+> Select Node
+>   🛪 [200Mbps] LoadBalance (323 ms)
+>     [200Mbps] LoadBalance Trojan (448 ms)
+>     [30M] CN2-US Cera (560 ms)
+>     [1Gbps] 4837-US (781 ms)
+>     [10Gbps] CN2-DE (811 ms)
+>     [300Mbps] Macau (1023 ms)
+>     [300Mbps] IPv6 LoadBalance (-1 ms)
+> ↓   [1Gbps] RackNerd (-1 ms)
+>
+> --------- Detail ----------
+> Name:               [200Mbps] LoadBalance
+> Protocol:           shadowsocks
+> Support UDP:        true
+> Latency:            323 ms
+>
 > ```
 
 ### Long-term use
@@ -208,6 +230,9 @@ gg config node
 2. Q: Can I use it on my IPv6-only machine?
 
    A: Of course, as long as your proxy server has an IPv6 entry.
+3. Q: When I use `gg sudo xxx`, I get `sudo: effective uid is not 0, ...`, how can I fix it?
+   
+   A: You should run `sudo gg xxx` instead, because `setuid` and `ptrace` can not work together. See [stackoverflow](https://stackoverflow.com/questions/34279612/cannot-strace-sudo-reports-that-effective-uid-is-nonzero).
 
 ## Shell autocompletion
 
@@ -304,6 +329,3 @@ complete -c gg -x -a "(__fish_complete_gg_subcommand)"
 - [ ] Quantumult
 - [ ] Quantumult X
 
-## TODO
-
-1. Restore the IP of connect that family is AF_LINKLAYER and others.

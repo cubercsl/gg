@@ -74,6 +74,15 @@ gg git clone --depth=1 https://github.com/torvalds/linux.git
 > Resolving deltas: 100% (7155/7155), done.
 > ```
 
+或者直接代理整个 shell session：
+
+```bash
+gg bash
+
+git clone --depth=1 https://github.com/torvalds/linux.git
+curl ipv4.appspot.com
+```
+
 ### 临时使用
 
 **使用节点的分享链接**
@@ -136,11 +145,24 @@ gg --subscription https://example.com/path/to/sub --select curl ipv4.appspot.com
 ```
 
 > ```
-> Select to connect:
-> [ ] 253ms - Azure US West
-> [x] 51ms - Azure HK
-> [ ] 70ms - xTom IIJ JP
-> 13.141.150.163
+> WARN[0000] Test nodes...
+> Use the arrow keys to navigate: ↓ ↑ → ←  and / toggles search
+> Select Node
+>   🛪 [200Mbps] LoadBalance (323 ms)
+>     [200Mbps] LoadBalance Trojan (448 ms)
+>     [30M] CN2-US Cera (560 ms)
+>     [1Gbps] 4837-US (781 ms)
+>     [10Gbps] CN2-DE (811 ms)
+>     [300Mbps] Macau (1023 ms)
+>     [300Mbps] IPv6 LoadBalance (-1 ms)
+> ↓   [1Gbps] RackNerd (-1 ms)
+> 
+> --------- Detail ----------
+> Name:               [200Mbps] LoadBalance
+> Protocol:           shadowsocks
+> Support UDP:        true
+> Latency:            323 ms
+> 
 > ```
 
 ### 长期使用
@@ -203,7 +225,10 @@ gg config node
 2. Q: 我能否在我的 IPv6-only 单栈机器上使用？
 
    A: 当然没有问题，只要你的代理服务器有 IPv6 入口即可。
+3. Q: 当我运行 `gg sudo xxx`, 我得到了一个错误 `sudo: effective uid is not 0, ...` ，怎样解决这个问题？
 
+   A: 你应该运行 `sudo gg xxx` ，因为 `setuid` 和 `ptrace` 不能共存。详情见 [stackoverflow](https://stackoverflow.com/questions/34279612/cannot-strace-sudo-reports-that-effective-uid-is-nonzero) 。
+ 
 ## Shell 自动补全
 
 如果您想在使用 gg 的时候能够补全其他命令，请参考以下方法：
